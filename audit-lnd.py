@@ -15,6 +15,7 @@ DESCRIPTION = 'audit lnd'
 REGEX_LOG_START = r'^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\..+'
 REGEX_BANDWIDTH_FAILURE = r'ChannelLink\((.+)\): insufficient bandwidth to route htlc: (\d+) mSAT'
 REGEX_REMOTE_FAILURE = r'ChannelLink\((.+)\): Failed to send (\d+) mSAT'
+REGEX_WATCHTOWER_PEERS = r'WTWR: Accepted incoming peer .+@(.+):\d+'
 
 ### GLOBAL VARIABLES ###
 
@@ -25,7 +26,7 @@ channel_point_map = {}
 
 def parse_args():
     parser = argparse.ArgumentParser(description=DESCRIPTION)
-    parser.add_argument('cmd', help='the command to execute {bandwidth-failures, remote-failures}')
+    parser.add_argument('cmd', help='the command to execute {bandwidth-failures, remote-failures, watchtower-peers}')
     parser.add_argument('--days', help='days back to search log (default=1)', default=1, type=int)
     parser.add_argument('--logdir', metavar='/path/to/logdir', help=f'lnd log dir path (default={DEFAULT_LOGDIR})', default=DEFAULT_LOGDIR)
     parser.add_argument('--restserver', metavar='host:port', help=f'lnd rest server (default={DEFAULT_RESTSERVER})', default=DEFAULT_RESTSERVER)
@@ -145,6 +146,29 @@ def parse_routing_failures(regex):
                 res[channel_point]['max'] = amount
     return res
 
+def watchtower_peers():
+    res = parse_watchtower_connections()
+    table = PrettyTable()
+    table.field_names = ['Peer', 'Connections']
+    table.align['Peer'] = 'l'
+    table.align['Connections'] = 'r'
+    table.sortby = 'Connections'
+    table.reversesort = True
+    for peer_ip, connections in res.items():
+        table.add_row([peer_ip, connections])
+    print()
+    print(table)
+    print()
+
+def parse_watchtower_connections():
+    res = defaultdict(int)
+    for line in get_logs():
+        match = re.search(REGEX_WATCHTOWER_PEERS, line)
+        if match:
+            res[match.group(1)] += 1
+    return res
+
+
 ### MAIN SCRIPT ###
 
 cmd = parse_args()
@@ -155,6 +179,9 @@ if cmd == 'bandwidth-failures':
 elif cmd == 'remote-failures':
     collect_channel_data()
     routing_failures(REGEX_REMOTE_FAILURE)
+elif cmd == 'watchtower-peers':
+    watchtower_peers()
 else:
     print('Invalid command: ' + cmd)
     exit(1)
+
