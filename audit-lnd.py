@@ -16,6 +16,7 @@ REGEX_LOG_START = r'^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\..+'
 REGEX_BANDWIDTH_FAILURE = r'ChannelLink\((.+)\): insufficient bandwidth to route htlc: (\d+) mSAT'
 REGEX_REMOTE_FAILURE = r'ChannelLink\((.+)\): Failed to send (\d+) mSAT'
 REGEX_WATCHTOWER_PEERS = r'WTWR: Accepted incoming peer .+@(.+):\d+'
+REGEX_WTCLIENT_FAILURES = r'WTCL: .+ unable to dial tower at any available Addresses:.+->(.+:\d+): (.+)'
 
 ### GLOBAL VARIABLES ###
 
@@ -26,7 +27,7 @@ channel_point_map = {}
 
 def parse_args():
     parser = argparse.ArgumentParser(description=DESCRIPTION)
-    parser.add_argument('cmd', help='the command to execute {bandwidth-failures, remote-failures, watchtower-peers}')
+    parser.add_argument('cmd', help='the command to execute {bandwidth-failures, remote-failures, watchtower-peers, wtclient-failures}')
     parser.add_argument('--days', help='days back to search log (default=1)', default=1, type=int)
     parser.add_argument('--logdir', metavar='/path/to/logdir', help=f'lnd log dir path (default={DEFAULT_LOGDIR})', default=DEFAULT_LOGDIR)
     parser.add_argument('--restserver', metavar='host:port', help=f'lnd rest server (default={DEFAULT_RESTSERVER})', default=DEFAULT_RESTSERVER)
@@ -168,6 +169,30 @@ def parse_watchtower_connections():
             res[match.group(1)] += 1
     return res
 
+def wtclient_failures():
+    res = parse_wtclient_failures()
+    table = PrettyTable()
+    table.field_names = ['Address', 'Error', 'Count']
+    table.align['Address'] = 'l'
+    table.align['Error'] = 'l'
+    table.align['Count'] = 'r'
+    table.sortby = 'Count'
+    table.reversesort = True
+    for address, errors in res.items():
+        for error, count in errors.items():
+            table.add_row([address, error, count])
+    print()
+    print(table)
+    print()
+
+def parse_wtclient_failures():
+    res = defaultdict(lambda:defaultdict(int))
+    for line in get_logs():
+        match = re.search(REGEX_WTCLIENT_FAILURES, line)
+        if match:
+            res[match.group(1)][match.group(2)] += 1
+    return res
+
 
 ### MAIN SCRIPT ###
 
@@ -181,6 +206,8 @@ elif cmd == 'remote-failures':
     routing_failures(REGEX_REMOTE_FAILURE)
 elif cmd == 'watchtower-peers':
     watchtower_peers()
+elif cmd == 'wtclient-failures':
+    wtclient_failures()
 else:
     print('Invalid command: ' + cmd)
     exit(1)
