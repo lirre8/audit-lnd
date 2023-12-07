@@ -47,8 +47,9 @@ def parse_args():
 
 def collect_channel_data():
     for channel in get_channels():
-        peer_alias = get_node_info(channel['remote_pubkey'])['node']['alias']
-        channel['peer_alias'] = peer_alias
+        node_info = get_node_info(channel['remote_pubkey'])
+        if 'node' in node_info:
+            channel['peer_alias'] = node_info['node']['alias']
         channel_point_map[channel['channel_point']] = channel
 
 def get_channels():
